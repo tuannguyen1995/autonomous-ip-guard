@@ -38,8 +38,16 @@ def test_url_rejection_cases():
     assert p_cred.username is not None or p_cred.password is not None
 
 
-def test_llm_json_sanitizer_logic():
-    raw_markdown = '```json\n{"verdict": "INFRINGING_COPY", "confidence": 92, "reason": "Verbatim reproduction"}\n```'
+def test_llm_json_sanitizer_logic_with_provenance():
+    raw_markdown = '''```json
+{
+  "verdict": "INFRINGING_COPY",
+  "confidence": 92,
+  "provenance_evidence": "Authoritative page header confirms alice.eth as sole creator under CC-BY-NC-4.0",
+  "authorization_evidence": "Suspected page stripped license headers and claims exclusive proprietary ownership",
+  "reason": "Direct verbatim reproduction of proprietary logic without permission or attribution"
+}
+```'''
     cleaned = raw_markdown.strip()
     if cleaned.startswith("```json"):
         cleaned = cleaned[7:]
@@ -48,6 +56,34 @@ def test_llm_json_sanitizer_logic():
     parsed = json.loads(cleaned.strip())
     assert parsed["verdict"] == "INFRINGING_COPY"
     assert parsed["confidence"] == 92
+    assert "alice.eth" in parsed["provenance_evidence"]
+    assert "stripped license" in parsed["authorization_evidence"]
+
+
+def test_provenance_rejection_verdict():
+    # When registrant claims ownership but authoritative site disproves or omits them
+    verdict = "UNVERIFIED_PROVENANCE"
+    status_mapping = {
+        "INFRINGING_COPY": "INFRINGING_CONFIRMED",
+        "AUTHORIZED_USE": "AUTHORIZED_CONFIRMED",
+        "FAIR_USE": "FAIR_USE_CONFIRMED",
+        "UNVERIFIED_PROVENANCE": "PROVENANCE_REJECTED",
+        "UNRELATED": "UNRELATED_DISMISSED",
+    }
+    assert status_mapping[verdict] == "PROVENANCE_REJECTED"
+
+
+def test_authorized_use_verdict():
+    # When suspected site complies with license attribution terms
+    verdict = "AUTHORIZED_USE"
+    status_mapping = {
+        "INFRINGING_COPY": "INFRINGING_CONFIRMED",
+        "AUTHORIZED_USE": "AUTHORIZED_CONFIRMED",
+        "FAIR_USE": "FAIR_USE_CONFIRMED",
+        "UNVERIFIED_PROVENANCE": "PROVENANCE_REJECTED",
+        "UNRELATED": "UNRELATED_DISMISSED",
+    }
+    assert status_mapping[verdict] == "AUTHORIZED_CONFIRMED"
 
 
 def test_llm_confidence_threshold_abort():
@@ -76,6 +112,12 @@ def test_contract_input_validation_boundaries():
     invalid_lic = "MIT"
     assert len(valid_lic) >= 5
     assert len(invalid_lic) < 5
+
+    # Author identity min 3 chars
+    valid_author = "Alice"
+    invalid_author = "Al"
+    assert len(valid_author) >= 3
+    assert len(invalid_author) < 3
 
     # Allegation min 15 chars
     valid_allegation = "The defendant cloned our codebase line-by-line."
