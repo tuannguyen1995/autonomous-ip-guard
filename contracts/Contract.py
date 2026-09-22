@@ -46,22 +46,6 @@ def _extract_origin(url: str) -> tuple:
     return scheme, hostname, port
 
 
-def _is_origin_valid(target_url: str, base_url: str) -> bool:
-    t_scheme, t_host, t_port = _extract_origin(target_url)
-    b_scheme, b_host, b_port = _extract_origin(base_url)
-
-    if t_scheme != b_scheme or t_port != b_port:
-        return False
-
-    if t_host == b_host:
-        return True
-
-    if t_host.endswith("." + b_host):
-        return True
-
-    return False
-
-
 def _parse_llm_json(text) -> dict:
     if isinstance(text, dict):
         return text
@@ -160,12 +144,10 @@ class Contract(gl.Contract):
     claims: TreeMap[str, InfringementClaim]
     work_counter: bigint
     total_infringements_recorded: bigint
-    compliance_arbiter: str
 
     def __init__(self):
         self.work_counter = bigint(0)
         self.total_infringements_recorded = bigint(0)
-        self.compliance_arbiter = _addr_str(gl.message.sender_address)
 
     @gl.public.write
     def register_original_work(
@@ -316,11 +298,11 @@ If copying is authorized or attribution compliant under the applicable license, 
 Allegation: {allegation}
 Evaluate whether unauthorized copying exceeding fair use has occurred.
 
-ORIGINAL AUTHORITATIVE CONTENT:
-{orig_text[:3500]}
+ORIGINAL AUTHORITATIVE CONTENT (FULL UNTRUNCATED):
+{orig_text}
 
-SUSPECTED INFRINGING CONTENT:
-{infr_text[:3500]}
+SUSPECTED INFRINGING CONTENT (FULL UNTRUNCATED):
+{infr_text}
 
 Rules:
 - INFRINGING_COPY (conf >= 75): Provenance verified, declared license verified, but suspected material is an unauthorized reproduction lacking permission or required attribution.
@@ -442,51 +424,6 @@ OUTPUT ONLY STRICT JSON:
         self.claims[cid] = claim
         self.works[work_id] = work
         return cid
-
-    @gl.public.write
-    def resolve_escalated_claim(
-        self,
-        claim_id: str,
-        manual_verdict: str,
-        override_reason: str,
-    ) -> None:
-        if claim_id not in self.claims:
-            raise UserError("Claim not found")
-        claim = self.claims[claim_id]
-
-        if claim.status != "ESCALATED":
-            raise UserError("Claim is not in ESCALATED state")
-
-        sender = _addr_str(gl.message.sender_address)
-        if sender != self.compliance_arbiter:
-            raise UserError("Only authorized arbiter can resolve escalated claims")
-
-        v_upper = manual_verdict.strip().upper()
-        allowed = (
-            "INFRINGING_COPY",
-            "AUTHORIZED_USE",
-            "FAIR_USE",
-            "UNVERIFIED_PROVENANCE",
-            "UNRELATED",
-        )
-        if v_upper not in allowed:
-            raise UserError("Invalid manual verdict choice")
-
-        if v_upper == "INFRINGING_COPY":
-            claim.status = "INFRINGING_CONFIRMED"
-            self.total_infringements_recorded += bigint(1)
-        elif v_upper == "AUTHORIZED_USE":
-            claim.status = "AUTHORIZED_CONFIRMED"
-        elif v_upper == "FAIR_USE":
-            claim.status = "FAIR_USE_CONFIRMED"
-        elif v_upper == "UNVERIFIED_PROVENANCE":
-            claim.status = "PROVENANCE_REJECTED"
-        else:
-            claim.status = "UNRELATED_DISMISSED"
-
-        claim.verdict = f"RESOLVED_MANUALLY_{v_upper}"
-        claim.legal_reasoning = f"Arbiter override ({sender}): {override_reason[:200]}"
-        self.claims[claim_id] = claim
 
     @gl.public.view
     def is_claim_infringing(self, claim_id: str) -> bool:

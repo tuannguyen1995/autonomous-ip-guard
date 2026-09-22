@@ -3,7 +3,7 @@
 > **Autonomous Provenance-Backed Intellectual Property & Copyright Court on GenLayer**  
 > *Track: Intelligent Contracts (Pure Contract Backend - No Frontend)*
 
-`autonomous-ip-guard` is a standalone Intelligent Contract primitive deployed on the GenLayer studionet network. It operates as an autonomous, on-chain copyright tribunal that validates **authoritative provenance**, **licensing authenticity**, and **infringement / authorization** without relying on centralized oracles.
+`autonomous-ip-guard` is a standalone Intelligent Contract primitive deployed on the GenLayer studionet network. It operates as an autonomous, on-chain copyright tribunal that validates **authoritative provenance**, **licensing authenticity**, and **infringement / authorization** without centralized oracles and with **zero first-caller admin privileges**.
 
 ---
 
@@ -11,20 +11,22 @@
 
 | Parameter | Value |
 | :--- | :--- |
-| **CONTRACT_ADDRESS** | `0x5eE98ecBC3aDb8Ee0F4665670eBE32ccFd2bAe31` |
+| **CONTRACT_ADDRESS** | `0xea4e26939A4B7b66A5574b1175FEA3714CcDE5D2` |
 | **NETWORK** | `studionet` |
 | **RPC URL** | `https://studio.genlayer.com/api` |
 | **Chain ID** | `61999` |
-| **Deployment Tx Hash** | `0xf31b10a664cd022cb847fc102ed6b5d3bef33f7be2c337dda296d6c8438a378e` |
-| **Explorer URL** | [https://explorer-studio.genlayer.com/address/0x5eE98ecBC3aDb8Ee0F4665670eBE32ccFd2bAe31](https://explorer-studio.genlayer.com/address/0x5eE98ecBC3aDb8Ee0F4665670eBE32ccFd2bAe31) |
+| **Deployment Tx Hash** | `0x434597c2c3245c94da03a88f2d5af541ae9618978f104936972604b0b21a7261` |
+| **Explorer URL** | [https://explorer-studio.genlayer.com/address/0xea4e26939A4B7b66A5574b1175FEA3714CcDE5D2](https://explorer-studio.genlayer.com/address/0xea4e26939A4B7b66A5574b1175FEA3714CcDE5D2) |
 | **Contract File** | `contracts/Contract.py` (v0.2.16) |
 | **GitHub Repository** | [https://github.com/tuannguyen1995/autonomous-ip-guard](https://github.com/tuannguyen1995/autonomous-ip-guard) |
 
 ---
 
-## 🏛️ Comprehensive Provenance & Licensing Adjudication Architecture
+## 🏛️ Comprehensive Provenance & Decentralized Adjudication Architecture
 
-To prevent false claims based on unverified registrant assertions, `AutonomousIPGuard` enforces a **3-part verification pipeline** executed inside GenLayer's non-deterministic flow before any infringement verdict can be confirmed:
+To prevent false claims based on unverified registrant assertions and eliminate single-point-of-failure administration, `AutonomousIPGuard` enforces:
+1. **Full Untruncated Content Auditing**: No token slicing (`[:3500]`) is applied; complete web-rendered text is provided to the LLM so that copyright footers, license badges, and author bylines are never missed.
+2. **Pure Validator Decentralization**: Zero centralized admin/arbiter override keys. All findings are finalized solely through BFT consensus across validating nodes.
 
 ```mermaid
 sequenceDiagram
@@ -38,8 +40,8 @@ sequenceDiagram
     
     rect rgb(240, 248, 255)
     Note over Leader: Non-Deterministic Evidence Gathering
-    Leader->>Leader: 1. gl.nondet.web.render (Authoritative Work URL)
-    Leader->>Leader: 2. gl.nondet.web.render (Suspected Infringing URL)
+    Leader->>Leader: 1. gl.nondet.web.render (Full Authoritative Work Content)
+    Leader->>Leader: 2. gl.nondet.web.render (Full Suspected Infringing Content)
     Leader->>Leader: 3. Provenance Audit: Corroborate author_identity vs page bylines/metadata
     Leader->>Leader: 4. License Audit: Validate claimed license vs page declared terms
     Leader->>Leader: 5. Authorization Audit: Inspect suspected page for license attribution/grants
@@ -55,7 +57,7 @@ sequenceDiagram
 ### 3-Part Verification Breakdown:
 1. **Provenance & Authorship Corroboration**:
    - The contract does not blindly trust registrant assertions.
-   - Validators inspect the rendered text of the authoritative source for author bylines, copyright notices, repository ownership, or cryptographic identifiers matching `author_identity`.
+   - Validators inspect the full rendered text of the authoritative source for author bylines, copyright notices, repository ownership, or cryptographic identifiers matching `author_identity`.
    - If the source disproves or fails to corroborate the registrant, the court returns `UNVERIFIED_PROVENANCE`, preventing malicious parties from claiming third-party works.
 2. **Authoritative Licensing Verification**:
    - The declared `license_terms` are checked against the actual license stated on the authoritative page.
@@ -70,9 +72,9 @@ sequenceDiagram
 
 ### Example 1: Original Work Registration with Author Identity (REAL ON-CHAIN RESULT)
 
-Executed live against deployed contract `0x5eE98ecBC3aDb8Ee0F4665670eBE32ccFd2bAe31` on GenLayer studionet:
+Executed live against deployed contract `0xea4e26939A4B7b66A5574b1175FEA3714CcDE5D2` on GenLayer studionet:
 
-- **Transaction Hash**: `0x1cf21add6ae722988bd29358d33edc74c2915ee137d7a1407e69f9dfcb41736d`
+- **Transaction Hash**: `0xff8b262a7953c51a6cd8a0219d11725ea770fed1e36b41aa904d2a89825987c0`
 - **Method Called**: `register_original_work(title, official_source_url, license_terms, author_identity)`
 - **Input Arguments**:
   ```json
@@ -88,7 +90,7 @@ Executed live against deployed contract `0x5eE98ecBC3aDb8Ee0F4665670eBE32ccFd2bA
   ```json
   {
     "work_id": "1",
-    "owner": "0x137d4d21255388aa79d63ef89f3fd853eb367aa0",
+    "owner": "0x9a297faa0f6d4a44ec4ce131f63a08e3ebde4d08",
     "author_identity": "protocol-specs-core",
     "title": "Autonomous Web3 Protocol Whitepaper",
     "official_source_url": "https://github.com/protocol/specs",
@@ -120,7 +122,7 @@ Illustrative end-to-end execution of `file_and_adjudicate_claim` against work `#
   }
   ```
 - **Adjudication Pipeline**:
-  1. Validator nodes render both URLs via `gl.nondet.web.render(..., mode="text")`.
+  1. Validator nodes render both URLs via `gl.nondet.web.render(..., mode="text")` without token truncation.
   2. Audit 1 confirms `protocol-specs-core` is the authoritative copyright holder in `https://github.com/protocol/specs` under CC-BY-4.0.
   3. Audit 2 inspects `https://mirrored-repository.io/unauthorized-fork` and confirms license headers were stripped and no attribution was provided.
   4. Audit 3 verifies substantial identical text exceeding fair use.
@@ -176,7 +178,6 @@ def validator_fn(leader_res) -> bool:
    - `UNRELATED`: Insufficient similarity.
    - `ABORT`: Network or parsing failure.
 2. **Uniform Confidence Threshold**: Both leader and validators must agree that the decision meets the high-confidence threshold ($\ge 75\%$).
-3. **Escalation Protocol**: If web scraping fails (bot protection, 404) or confidence is $< 75\%$, the claim enters `ESCALATED` state, allowing the `compliance_arbiter` to conduct manual resolution (`resolve_escalated_claim`).
 
 ---
 
@@ -185,7 +186,7 @@ def validator_fn(leader_res) -> bool:
 ```text
 autonomous-ip-guard/
 ├── contracts/
-│   └── Contract.py          # Intelligent Contract compliant with GenLayer v0.2.16
+│   └── Contract.py          # Intelligent Contract compliant with GenLayer v0.2.16 (untruncated, decentralized)
 ├── tests/
 │   └── test_ip_guard.py     # Pytest & gltest test suite (provenance, auth, boundary tests)
 ├── scripts/
@@ -207,9 +208,7 @@ autonomous-ip-guard/
 - `register_original_work(title: str, official_source_url: str, license_terms: str, author_identity: str = "") -> str`  
   Registers a creative work along with expected author identity/byline, returning a unique `work_id`.
 - `file_and_adjudicate_claim(work_id: str, infringing_url: str, specific_allegation: str) -> str`  
-  Executes non-deterministic web rendering, provenance corroboration, authorization auditing, and multi-sample LLM adjudication.
-- `resolve_escalated_claim(claim_id: str, manual_verdict: str, override_reason: str) -> None`  
-  Arbiter-only fallback to settle claims where web rendering failed or confidence fell below 75%.
+  Executes non-deterministic web rendering (full content), provenance corroboration, authorization auditing, and multi-sample LLM adjudication.
 
 ### View Operations
 - `is_claim_infringing(claim_id: str) -> bool`  
