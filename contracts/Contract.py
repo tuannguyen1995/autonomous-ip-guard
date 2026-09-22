@@ -77,7 +77,13 @@ def _parse_llm_json(text) -> dict:
             cleaned = cleaned[:-3]
         return json.loads(cleaned.strip())
     except Exception as e:
-        return {"verdict": "ABORT", "confidence": 0, "reason": f"Parse error: {str(e)}"}
+        return {
+            "verdict": "ABORT",
+            "confidence": 0,
+            "provenance_evidence": "none",
+            "authorization_evidence": "none",
+            "reason": f"Parse error: {str(e)}",
+        }
 
 
 def _safe_parse(raw) -> dict:
@@ -86,7 +92,15 @@ def _safe_parse(raw) -> dict:
         return None
 
     verdict = str(data.get("verdict", "")).strip().upper()
-    if verdict not in ("INFRINGING_COPY", "FAIR_USE", "UNRELATED", "ABORT"):
+    valid_verdicts = (
+        "INFRINGING_COPY",
+        "AUTHORIZED_USE",
+        "FAIR_USE",
+        "UNVERIFIED_PROVENANCE",
+        "UNRELATED",
+        "ABORT",
+    )
+    if verdict not in valid_verdicts:
         return None
 
     conf = data.get("confidence", 0)
@@ -95,6 +109,8 @@ def _safe_parse(raw) -> dict:
     if not isinstance(conf, int) or not (0 <= conf <= 100):
         return None
 
+    prov_ev = str(data.get("provenance_evidence", ""))[:200]
+    auth_ev = str(data.get("authorization_evidence", ""))[:200]
     reason = str(data.get("reason", ""))
 
     if conf < 75 and verdict != "ABORT":
@@ -104,6 +120,8 @@ def _safe_parse(raw) -> dict:
     return {
         "verdict": verdict,
         "confidence": conf,
+        "provenance_evidence": prov_ev,
+        "authorization_evidence": auth_ev,
         "reason": reason[:300],
     }
 
@@ -113,10 +131,13 @@ def _safe_parse(raw) -> dict:
 class OriginalWork:
     work_id: str
     owner: str
+    author_identity: str
     title: str
     official_source_url: str
     license_terms: str
     total_claims: bigint
+    verified_license: str
+    provenance_status: str
 
 
 @allow_storage
@@ -126,10 +147,12 @@ class InfringementClaim:
     work_id: str
     infringing_url: str
     specific_allegation: str
-    status: str       # PENDING | INFRINGING_CONFIRMED | FAIR_USE_CONFIRMED | UNRELATED_DISMISSED | ESCALATED
-    verdict: str      # INFRINGING_COPY | FAIR_USE | UNRELATED | ABORT
+    status: str       # PENDING | INFRINGING_CONFIRMED | AUTHORIZED_CONFIRMED | FAIR_USE_CONFIRMED | PROVENANCE_REJECTED | UNRELATED_DISMISSED | ESCALATED
+    verdict: str      # INFRINGING_COPY | AUTHORIZED_USE | FAIR_USE | UNVERIFIED_PROVENANCE | UNRELATED | ABORT
     confidence: bigint
     legal_reasoning: str
+    provenance_evidence: str
+    authorization_evidence: str
 
 
 class Contract(gl.Contract):
@@ -150,15 +173,23 @@ class Contract(gl.Contract):
         title: str,
         official_source_url: str,
         license_terms: str,
+        author_identity: str = "",
     ) -> str:
         title = title.strip()
         official_source_url = official_source_url.strip()
         license_terms = license_terms.strip()
+        author_identity = author_identity.strip()
+
+        sender = _addr_str(gl.message.sender_address)
+        if not author_identity:
+            author_identity = sender
 
         if len(title) < 3:
             raise UserError("Title too short")
         if len(license_terms) < 5:
             raise UserError("License terms too short")
+        if len(author_identity) < 3:
+            raise UserError("Author identity too short")
 
         _extract_origin(official_source_url)
 
@@ -167,11 +198,14 @@ class Contract(gl.Contract):
 
         self.works[wid] = OriginalWork(
             work_id=wid,
-            owner=_addr_str(gl.message.sender_address),
+            owner=sender,
+            author_identity=author_identity,
             title=title,
             official_source_url=official_source_url,
             license_terms=license_terms,
             total_claims=bigint(0),
+            verified_license="PENDING_VERIFICATION",
+            provenance_status="UNVERIFIED",
         )
         return wid
 
@@ -206,6 +240,8 @@ class Contract(gl.Contract):
             verdict="",
             confidence=bigint(0),
             legal_reasoning="",
+            provenance_evidence="",
+            authorization_evidence="",
         )
         self.works[work_id] = work
 
@@ -213,6 +249,8 @@ class Contract(gl.Contract):
         u_infr = str(infringing_url)
         w_title = str(work.title)
         w_lic = str(work.license_terms)
+        w_author = str(work.author_identity)
+        w_owner = str(work.owner)
         allegation = str(specific_allegation)
 
         def leader_fn():
@@ -220,25 +258,63 @@ class Contract(gl.Contract):
                 res_orig = gl.nondet.web.render(u_orig, mode="text")
                 orig_text = res_orig.content if hasattr(res_orig, "content") else str(res_orig)
                 if not orig_text or len(orig_text.strip()) < 30:
-                    return {"verdict": "ABORT", "confidence": 0, "reason": "Original work URL empty"}
+                    return {
+                        "verdict": "ABORT",
+                        "confidence": 0,
+                        "provenance_evidence": "none",
+                        "authorization_evidence": "none",
+                        "reason": "Original work URL empty or unreadable",
+                    }
             except Exception as e:
-                return {"verdict": "ABORT", "confidence": 0, "reason": f"Original fetch error: {str(e)}"}
+                return {
+                    "verdict": "ABORT",
+                    "confidence": 0,
+                    "provenance_evidence": "none",
+                    "authorization_evidence": "none",
+                    "reason": f"Original fetch error: {str(e)}",
+                }
 
             try:
                 res_infr = gl.nondet.web.render(u_infr, mode="text")
                 infr_text = res_infr.content if hasattr(res_infr, "content") else str(res_infr)
                 if not infr_text or len(infr_text.strip()) < 30:
-                    return {"verdict": "ABORT", "confidence": 0, "reason": "Suspected infringing URL empty"}
+                    return {
+                        "verdict": "ABORT",
+                        "confidence": 0,
+                        "provenance_evidence": "none",
+                        "authorization_evidence": "none",
+                        "reason": "Suspected infringing URL empty or unreadable",
+                    }
             except Exception as e:
-                return {"verdict": "ABORT", "confidence": 0, "reason": f"Infringing fetch error: {str(e)}"}
+                return {
+                    "verdict": "ABORT",
+                    "confidence": 0,
+                    "provenance_evidence": "none",
+                    "authorization_evidence": "none",
+                    "reason": f"Infringing fetch error: {str(e)}",
+                }
 
             prompt = f"""
-SYSTEM: You are the Autonomous Decentralized Intellectual Property & Copyright Court.
-Evaluate whether the suspected material constitutes an infringing copy of the registered original work.
+SYSTEM: You are the Autonomous Decentralized Intellectual Property & Copyright Court on GenLayer.
+You must perform a 3-part authoritative analysis before deciding copyright infringement:
 
-REGISTERED WORK: {w_title}
-LICENSE TERMS: {w_lic}
-ALLEGATION DETAILS: {allegation}
+1. PROVENANCE & OWNERSHIP AUDIT:
+- Expected Author / Identity: {w_author}
+- Registered Owner Address: {w_owner}
+- Registered Title: {w_title}
+- Claimed License: {w_lic}
+Does the ORIGINAL AUTHORITATIVE CONTENT positively identify or corroborate this author/owner (e.g. byline, copyright header, author bio, handle, organization, or wallet address)?
+Does the declared license align with the license terms present on the authoritative page?
+If the original source does NOT corroborate authorship, or if the declared license directly contradicts the page, output UNVERIFIED_PROVENANCE.
+
+2. AUTHORIZATION & ATTRIBUTION AUDIT:
+Examine the SUSPECTED INFRINGING CONTENT:
+Does it contain an explicit authorization notice, sub-license grant, or compliant attribution (e.g. author credit, license link) that satisfies the original license terms?
+If copying is authorized or attribution compliant under the applicable license, output AUTHORIZED_USE.
+
+3. INFRINGEMENT & SIMILARITY AUDIT:
+Allegation: {allegation}
+Evaluate whether unauthorized copying exceeding fair use has occurred.
 
 ORIGINAL AUTHORITATIVE CONTENT:
 {orig_text[:3500]}
@@ -247,15 +323,19 @@ SUSPECTED INFRINGING CONTENT:
 {infr_text[:3500]}
 
 Rules:
-- INFRINGING_COPY (conf >= 75): Extensive plagiarized text, unauthorized distribution, identical proprietary logic, or direct license violation without attribution.
+- INFRINGING_COPY (conf >= 75): Provenance verified, declared license verified, but suspected material is an unauthorized reproduction lacking permission or required attribution.
+- AUTHORIZED_USE (conf >= 75): Copying is authorized, explicitly permitted by author, or complies fully with attribution terms of the original license.
 - FAIR_USE (conf >= 75): Transformative commentary, critical analysis, brief quotation with proper credit, or demonstrably independent creation.
-- UNRELATED (conf >= 75): Content has no substantial similarity to the original work.
+- UNVERIFIED_PROVENANCE (conf >= 75): Authoritative source fails to substantiate registrant ownership/authorship, or declared license contradicts page evidence.
+- UNRELATED (conf >= 75): Content has no substantial similarity to original work.
 - ABORT: Pages are 404, rate-limited, captcha-blocked, or unreadable.
 
 OUTPUT ONLY STRICT JSON:
 {{
-  "verdict": "INFRINGING_COPY" | "FAIR_USE" | "UNRELATED" | "ABORT",
+  "verdict": "INFRINGING_COPY" | "AUTHORIZED_USE" | "FAIR_USE" | "UNVERIFIED_PROVENANCE" | "UNRELATED" | "ABORT",
   "confidence": 0-100,
+  "provenance_evidence": "max 200 chars describing author and license verification",
+  "authorization_evidence": "max 200 chars describing presence or absence of permission/attribution",
   "reason": "max 300 chars technical legal justification"
 }}
 """
@@ -267,15 +347,33 @@ OUTPUT ONLY STRICT JSON:
                 p2 = _safe_parse(raw2)
 
                 if p1 is None or p2 is None:
-                    return {"verdict": "ABORT", "confidence": 0, "reason": "parse_failed"}
+                    return {
+                        "verdict": "ABORT",
+                        "confidence": 0,
+                        "provenance_evidence": "parse_failure",
+                        "authorization_evidence": "parse_failure",
+                        "reason": "parse_failed",
+                    }
 
                 if p1["verdict"] != p2["verdict"]:
-                    return {"verdict": "ABORT", "confidence": 0, "reason": "multi_sample_divergence"}
+                    return {
+                        "verdict": "ABORT",
+                        "confidence": 0,
+                        "provenance_evidence": "divergence",
+                        "authorization_evidence": "divergence",
+                        "reason": "multi_sample_divergence",
+                    }
 
                 p1["confidence"] = (p1["confidence"] + p2["confidence"]) // 2
                 return p1
             except Exception as e:
-                return {"verdict": "ABORT", "confidence": 0, "reason": f"LLM error: {str(e)}"}
+                return {
+                    "verdict": "ABORT",
+                    "confidence": 0,
+                    "provenance_evidence": "llm_error",
+                    "authorization_evidence": "llm_error",
+                    "reason": f"LLM error: {str(e)}",
+                }
 
         def validator_fn(leader_res) -> bool:
             if not isinstance(leader_res, gl.vm.Return):
@@ -299,11 +397,19 @@ OUTPUT ONLY STRICT JSON:
         result = _safe_parse(result_raw)
 
         if result is None:
-            result = {"verdict": "ABORT", "confidence": 0, "reason": "adjudication_failed"}
+            result = {
+                "verdict": "ABORT",
+                "confidence": 0,
+                "provenance_evidence": "adjudication_failed",
+                "authorization_evidence": "adjudication_failed",
+                "reason": "adjudication_failed",
+            }
 
         verdict = result["verdict"]
         confidence = result["confidence"]
         reason = result["reason"]
+        prov_ev = result["provenance_evidence"]
+        auth_ev = result["authorization_evidence"]
 
         if confidence < 75 and verdict != "ABORT":
             verdict = "ABORT"
@@ -312,18 +418,29 @@ OUTPUT ONLY STRICT JSON:
         claim.verdict = verdict
         claim.confidence = bigint(confidence)
         claim.legal_reasoning = reason
+        claim.provenance_evidence = prov_ev
+        claim.authorization_evidence = auth_ev
 
         if verdict == "INFRINGING_COPY":
             claim.status = "INFRINGING_CONFIRMED"
+            work.provenance_status = "VERIFIED_AUTHORITATIVE"
             self.total_infringements_recorded += bigint(1)
+        elif verdict == "AUTHORIZED_USE":
+            claim.status = "AUTHORIZED_CONFIRMED"
+            work.provenance_status = "VERIFIED_AUTHORITATIVE"
         elif verdict == "FAIR_USE":
             claim.status = "FAIR_USE_CONFIRMED"
+            work.provenance_status = "VERIFIED_AUTHORITATIVE"
+        elif verdict == "UNVERIFIED_PROVENANCE":
+            claim.status = "PROVENANCE_REJECTED"
+            work.provenance_status = "DISPUTED"
         elif verdict == "UNRELATED":
             claim.status = "UNRELATED_DISMISSED"
         else:
             claim.status = "ESCALATED"
 
         self.claims[cid] = claim
+        self.works[work_id] = work
         return cid
 
     @gl.public.write
@@ -345,14 +462,25 @@ OUTPUT ONLY STRICT JSON:
             raise UserError("Only authorized arbiter can resolve escalated claims")
 
         v_upper = manual_verdict.strip().upper()
-        if v_upper not in ("INFRINGING_COPY", "FAIR_USE", "UNRELATED"):
+        allowed = (
+            "INFRINGING_COPY",
+            "AUTHORIZED_USE",
+            "FAIR_USE",
+            "UNVERIFIED_PROVENANCE",
+            "UNRELATED",
+        )
+        if v_upper not in allowed:
             raise UserError("Invalid manual verdict choice")
 
         if v_upper == "INFRINGING_COPY":
             claim.status = "INFRINGING_CONFIRMED"
             self.total_infringements_recorded += bigint(1)
+        elif v_upper == "AUTHORIZED_USE":
+            claim.status = "AUTHORIZED_CONFIRMED"
         elif v_upper == "FAIR_USE":
             claim.status = "FAIR_USE_CONFIRMED"
+        elif v_upper == "UNVERIFIED_PROVENANCE":
+            claim.status = "PROVENANCE_REJECTED"
         else:
             claim.status = "UNRELATED_DISMISSED"
 
@@ -374,10 +502,13 @@ OUTPUT ONLY STRICT JSON:
         return json.dumps({
             "work_id": w.work_id,
             "owner": w.owner,
+            "author_identity": w.author_identity,
             "title": w.title,
             "official_source_url": w.official_source_url,
             "license_terms": w.license_terms,
             "total_claims": str(w.total_claims),
+            "verified_license": w.verified_license,
+            "provenance_status": w.provenance_status,
         })
 
     @gl.public.view
@@ -394,6 +525,8 @@ OUTPUT ONLY STRICT JSON:
             "verdict": c.verdict,
             "confidence": str(c.confidence),
             "legal_reasoning": c.legal_reasoning,
+            "provenance_evidence": c.provenance_evidence,
+            "authorization_evidence": c.authorization_evidence,
         })
 
     @gl.public.view
