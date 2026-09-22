@@ -44,13 +44,16 @@ def main():
     print(f"Current Balance: {balance} wei")
     if balance < 10**17:
         print("Funding account via studionet faucet...")
-        try:
-            client.fund_account(account.address, 10**18)
-            time.sleep(2)
-            balance = client.get_balance(account.address)
-            print(f"Funded Balance: {balance} wei")
-        except Exception as e:
-            print(f"Note on faucet funding: {e}")
+        for attempt in range(3):
+            try:
+                client.fund_account(account.address, 10**18)
+                time.sleep(3)
+                balance = client.get_balance(account.address)
+                print(f"Funded Balance: {balance} wei")
+                break
+            except Exception as e:
+                print(f"Faucet attempt {attempt+1} note: {e}")
+                time.sleep(2)
 
     # 4. Read contract code
     if not CONTRACT_PATH.exists():
@@ -61,11 +64,22 @@ def main():
 
     print(f"\nDeploying {CONTRACT_PATH.name} ({len(contract_code)} bytes)...")
     
-    # 5. Deploy contract
-    tx_hash = client.deploy_contract(
-        code=contract_code,
-        leader_only=True
-    )
+    # 5. Deploy contract with retry on transient network 502s
+    tx_hash = None
+    for attempt in range(5):
+        try:
+            tx_hash = client.deploy_contract(
+                code=contract_code,
+                leader_only=True
+            )
+            break
+        except Exception as e:
+            print(f"Deploy attempt {attempt+1} error: {e}. Retrying in 5 seconds...")
+            time.sleep(5)
+
+    if not tx_hash:
+        raise RuntimeError("Failed to deploy contract after 5 attempts")
+
     if isinstance(tx_hash, bytes):
         tx_hash_hex = "0x" + tx_hash.hex()
     else:
@@ -74,9 +88,19 @@ def main():
     print(f"Deployment Transaction Hash: {tx_hash_hex}")
     print("Waiting for transaction receipt...")
 
-    receipt = client.wait_for_transaction_receipt(tx_hash)
-    
-    # In GenLayer studionet deployment receipts, contract address is in logs or 'to'
+    receipt = None
+    for attempt in range(10):
+        try:
+            receipt = client.wait_for_transaction_receipt(tx_hash)
+            break
+        except Exception as e:
+            print(f"Wait receipt attempt {attempt+1} error: {e}. Retrying in 3 seconds...")
+            time.sleep(3)
+
+    if not receipt:
+        raise RuntimeError("Failed to obtain transaction receipt")
+
+    # In GenLayer studionet deployment receipts, contract address is in 'to' or logs
     contract_address = None
     if receipt.get("to"):
         contract_address = receipt.get("to")
