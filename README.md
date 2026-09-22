@@ -11,12 +11,11 @@
 
 | Parameter | Value |
 | :--- | :--- |
-| **CONTRACT_ADDRESS** | `0xea4e26939A4B7b66A5574b1175FEA3714CcDE5D2` |
+| **CONTRACT_ADDRESS** | `0xC697331A59FCa78d69970F317059056e130C1b8B` |
 | **NETWORK** | `studionet` |
 | **RPC URL** | `https://studio.genlayer.com/api` |
 | **Chain ID** | `61999` |
-| **Deployment Tx Hash** | `0x434597c2c3245c94da03a88f2d5af541ae9618978f104936972604b0b21a7261` |
-| **Explorer URL** | [https://explorer-studio.genlayer.com/address/0xea4e26939A4B7b66A5574b1175FEA3714CcDE5D2](https://explorer-studio.genlayer.com/address/0xea4e26939A4B7b66A5574b1175FEA3714CcDE5D2) |
+| **Explorer URL** | [https://explorer-studio.genlayer.com/address/0xC697331A59FCa78d69970F317059056e130C1b8B](https://explorer-studio.genlayer.com/address/0xC697331A59FCa78d69970F317059056e130C1b8B) |
 | **Contract File** | `contracts/Contract.py` (v0.2.16) |
 | **GitHub Repository** | [https://github.com/tuannguyen1995/autonomous-ip-guard](https://github.com/tuannguyen1995/autonomous-ip-guard) |
 
@@ -72,9 +71,9 @@ sequenceDiagram
 
 ### Example 1: Original Work Registration with Author Identity (REAL ON-CHAIN RESULT)
 
-Executed live against deployed contract `0xea4e26939A4B7b66A5574b1175FEA3714CcDE5D2` on GenLayer studionet:
+Executed live against deployed contract `0xC697331A59FCa78d69970F317059056e130C1b8B` on GenLayer studionet:
 
-- **Transaction Hash**: `0xff8b262a7953c51a6cd8a0219d11725ea770fed1e36b41aa904d2a89825987c0`
+- **Transaction Hash**: `0xf1a290732d3fdbe5667fe1fa2ea508d7eaf5308f8c951fe8d56388354b4597a0`
 - **Method Called**: `register_original_work(title, official_source_url, license_terms, author_identity)`
 - **Input Arguments**:
   ```json
@@ -90,7 +89,7 @@ Executed live against deployed contract `0xea4e26939A4B7b66A5574b1175FEA3714CcDE
   ```json
   {
     "work_id": "1",
-    "owner": "0x9a297faa0f6d4a44ec4ce131f63a08e3ebde4d08",
+    "owner": "0xb94ccb3e0124b68b14474d5f147c4bef1f508415",
     "author_identity": "protocol-specs-core",
     "title": "Autonomous Web3 Protocol Whitepaper",
     "official_source_url": "https://github.com/protocol/specs",
