@@ -1,39 +1,86 @@
 # autonomous-ip-guard
 
-> **Autonomous Decentralized Intellectual Property & Copyright Court on GenLayer**  
+> **Autonomous Provenance-Backed Intellectual Property & Copyright Court on GenLayer**  
 > *Track: Intelligent Contracts (Pure Contract Backend - No Frontend)*
 
-`autonomous-ip-guard` is a standalone Intelligent Contract primitive deployed on the GenLayer studionet network. It operates as an autonomous, on-chain copyright tribunal. The contract ingests URLs for both original authoritative creative works and suspected infringing works, renders their contents in a sandboxed non-deterministic web environment directly from validator nodes, runs dual multi-sampled LLM legal adjudication, and reaches BFT consensus on the **meaning** (legal verdict and confidence tier) of copyright infringement without centralized oracles.
+`autonomous-ip-guard` is a standalone Intelligent Contract primitive deployed on the GenLayer studionet network. It operates as an autonomous, on-chain copyright tribunal that validates **authoritative provenance**, **licensing authenticity**, and **infringement / authorization** without relying on centralized oracles.
 
 ---
 
-## 🚀 Deployment
+## 🚀 Deployment Evidence
 
 | Parameter | Value |
 | :--- | :--- |
-| **CONTRACT_ADDRESS** | `0xa0f2D4194e751faAcC254a1e56dCc353CCC036E1` |
+| **CONTRACT_ADDRESS** | `0x5eE98ecBC3aDb8Ee0F4665670eBE32ccFd2bAe31` |
 | **NETWORK** | `studionet` |
 | **RPC URL** | `https://studio.genlayer.com/api` |
 | **Chain ID** | `61999` |
+| **Deployment Tx Hash** | `0xf31b10a664cd022cb847fc102ed6b5d3bef33f7be2c337dda296d6c8438a378e` |
+| **Explorer URL** | [https://explorer-studio.genlayer.com/address/0x5eE98ecBC3aDb8Ee0F4665670eBE32ccFd2bAe31](https://explorer-studio.genlayer.com/address/0x5eE98ecBC3aDb8Ee0F4665670eBE32ccFd2bAe31) |
 | **Contract File** | `contracts/Contract.py` (v0.2.16) |
 | **GitHub Repository** | [https://github.com/tuannguyen1995/autonomous-ip-guard](https://github.com/tuannguyen1995/autonomous-ip-guard) |
 
 ---
 
+## 🏛️ Comprehensive Provenance & Licensing Adjudication Architecture
+
+To prevent false claims based on unverified registrant assertions, `AutonomousIPGuard` enforces a **3-part verification pipeline** executed inside GenLayer's non-deterministic flow before any infringement verdict can be confirmed:
+
+```mermaid
+sequenceDiagram
+    participant Claimant as Claimant / Registrant
+    participant Contract as AutonomousIPGuard Contract
+    participant Leader as Leader Validator (Non-Det)
+    participant Validator as Validator Nodes (Consensus)
+
+    Claimant->>Contract: file_and_adjudicate_claim(work_id, infringing_url, allegation)
+    Contract->>Leader: run_nondet(leader_fn, validator_fn)
+    
+    rect rgb(240, 248, 255)
+    Note over Leader: Non-Deterministic Evidence Gathering
+    Leader->>Leader: 1. gl.nondet.web.render (Authoritative Work URL)
+    Leader->>Leader: 2. gl.nondet.web.render (Suspected Infringing URL)
+    Leader->>Leader: 3. Provenance Audit: Corroborate author_identity vs page bylines/metadata
+    Leader->>Leader: 4. License Audit: Validate claimed license vs page declared terms
+    Leader->>Leader: 5. Authorization Audit: Inspect suspected page for license attribution/grants
+    Leader->>Leader: 6. Substantive Infringement Analysis & Dual LLM multi-sampling
+    end
+
+    Leader->>Validator: Propose Structured Verdict
+    Note over Validator: Semantic Validator compares MEANING:<br/>- verdict match (INFRINGING_COPY, AUTHORIZED_USE, FAIR_USE, UNVERIFIED_PROVENANCE, UNRELATED, ABORT)<br/>- confidence tier (>= 75%)
+    Validator-->>Contract: Consensus Finalized (MAJORITY_AGREE)
+    Contract->>Contract: Update Claim State & Store Verified Provenance Evidence
+```
+
+### 3-Part Verification Breakdown:
+1. **Provenance & Authorship Corroboration**:
+   - The contract does not blindly trust registrant assertions.
+   - Validators inspect the rendered text of the authoritative source for author bylines, copyright notices, repository ownership, or cryptographic identifiers matching `author_identity`.
+   - If the source disproves or fails to corroborate the registrant, the court returns `UNVERIFIED_PROVENANCE`, preventing malicious parties from claiming third-party works.
+2. **Authoritative Licensing Verification**:
+   - The declared `license_terms` are checked against the actual license stated on the authoritative page.
+   - If a registrant claims restrictive "All Rights Reserved" but the page explicitly publishes under permissive terms, the discrepancy is flagged.
+3. **Authorization & Attribution Audit**:
+   - Before classifying a work as an infringement, the suspected material is inspected for explicit permission notices, sub-licenses, or compliant attribution satisfying open-source licenses (e.g., CC-BY or MIT attribution clauses).
+   - Compliant reuse is designated as `AUTHORIZED_USE`, protecting lawful distributors.
+
+---
+
 ## 🧪 Worked Examples: Real Result vs Expected Output
 
-### Example 1: Original Work Registration (REAL ON-CHAIN RESULT)
+### Example 1: Original Work Registration with Author Identity (REAL ON-CHAIN RESULT)
 
-Executed live against deployed contract `0xa0f2D4194e751faAcC254a1e56dCc353CCC036E1` on GenLayer studionet:
+Executed live against deployed contract `0x5eE98ecBC3aDb8Ee0F4665670eBE32ccFd2bAe31` on GenLayer studionet:
 
-- **Transaction Hash**: `0xe5f0ce36a233757ab25a227d92df86c3c9800919c6849ed68ed78948be3a2a76`
-- **Method Called**: `register_original_work(title, official_source_url, license_terms)`
+- **Transaction Hash**: `0x1cf21add6ae722988bd29358d33edc74c2915ee137d7a1407e69f9dfcb41736d`
+- **Method Called**: `register_original_work(title, official_source_url, license_terms, author_identity)`
 - **Input Arguments**:
   ```json
   {
     "title": "Autonomous Web3 Protocol Whitepaper",
     "official_source_url": "https://github.com/protocol/specs",
-    "license_terms": "Creative Commons Attribution 4.0 International"
+    "license_terms": "Creative Commons Attribution 4.0 International",
+    "author_identity": "protocol-specs-core"
   }
   ```
 - **Real Returned Value (`work_id`)**: `"1"`
@@ -41,11 +88,14 @@ Executed live against deployed contract `0xa0f2D4194e751faAcC254a1e56dCc353CCC03
   ```json
   {
     "work_id": "1",
-    "owner": "0x3f4e2262ba577279997e114a1ddebf334a809c70",
+    "owner": "0x137d4d21255388aa79d63ef89f3fd853eb367aa0",
+    "author_identity": "protocol-specs-core",
     "title": "Autonomous Web3 Protocol Whitepaper",
     "official_source_url": "https://github.com/protocol/specs",
     "license_terms": "Creative Commons Attribution 4.0 International",
-    "total_claims": "0"
+    "total_claims": "0",
+    "verified_license": "PENDING_VERIFICATION",
+    "provenance_status": "UNVERIFIED"
   }
   ```
 - **Global Court Stats Query (`get_stats()`)**:
@@ -56,7 +106,7 @@ Executed live against deployed contract `0xa0f2D4194e751faAcC254a1e56dCc353CCC03
   }
   ```
 
-### Example 2: Infringement Claim Adjudication (ILLUSTRATIVE / EXPECTED RESULT)
+### Example 2: Infringement Claim with Provenance & Attribution Check (ILLUSTRATIVE / EXPECTED RESULT)
 
 Illustrative end-to-end execution of `file_and_adjudicate_claim` against work `#1`:
 
@@ -69,10 +119,11 @@ Illustrative end-to-end execution of `file_and_adjudicate_claim` against work `#
     "specific_allegation": "Complete verbatim copy of consensus specification sections 3 and 4 with removed attribution header in direct violation of CC-BY-4.0 license."
   }
   ```
-- **Expected Adjudication Pipeline**:
-  1. Validator nodes render `https://github.com/protocol/specs` and `https://mirrored-repository.io/unauthorized-fork` via `gl.nondet.web.render(..., mode="text")`.
-  2. Dual LLM sampling compares authoritative text against suspected infringing text.
-  3. Both samples evaluate substantial similarity and license adherence.
+- **Adjudication Pipeline**:
+  1. Validator nodes render both URLs via `gl.nondet.web.render(..., mode="text")`.
+  2. Audit 1 confirms `protocol-specs-core` is the authoritative copyright holder in `https://github.com/protocol/specs` under CC-BY-4.0.
+  3. Audit 2 inspects `https://mirrored-repository.io/unauthorized-fork` and confirms license headers were stripped and no attribution was provided.
+  4. Audit 3 verifies substantial identical text exceeding fair use.
 - **Expected Output (`claim_id`)**: `"1_1"`
 - **Expected On-Chain Claim State (`get_claim("1_1")`)**:
   ```json
@@ -83,8 +134,10 @@ Illustrative end-to-end execution of `file_and_adjudicate_claim` against work `#
     "specific_allegation": "Complete verbatim copy of consensus specification sections 3 and 4 with removed attribution header in direct violation of CC-BY-4.0 license.",
     "status": "INFRINGING_CONFIRMED",
     "verdict": "INFRINGING_COPY",
-    "confidence": "91",
-    "legal_reasoning": "Substantial textual and architectural overlap detected with original authoritative spec. Direct verbatim clauses without license notice violated CC-BY-4.0 terms."
+    "confidence": "92",
+    "legal_reasoning": "Substantial verbatim reproduction of consensus logic. Stripping original author attribution directly violates CC-BY-4.0 license terms.",
+    "provenance_evidence": "Authoritative page header corroborates protocol-specs-core as copyright holder under CC-BY-4.0.",
+    "authorization_evidence": "Suspected repository contains no license notice, author attribution, or authorization grant."
   }
   ```
 
@@ -94,43 +147,36 @@ Illustrative end-to-end execution of `file_and_adjudicate_claim` against work `#
 
 A critical design requirement of GenLayer Intelligent Contracts is that validators must agree on the **MEANING** of a decision, not on its surface-level formatting or character-by-character string serialization.
 
-```mermaid
-sequenceDiagram
-    participant Leader as Leader Validator
-    participant Validator as Validator Nodes
-    participant Contract as AutonomousIPGuard State
+### Semantic Consensus Implementation:
+```python
+def validator_fn(leader_res) -> bool:
+    if not isinstance(leader_res, gl.vm.Return):
+        return False
 
-    Leader->>Leader: gl.nondet.web.render (Authoritative URL)
-    Leader->>Leader: gl.nondet.web.render (Infringing URL)
-    Leader->>Leader: Dual LLM prompt multi-sampling
-    Leader->>Leader: leader_fn() -> {verdict: "INFRINGING_COPY", confidence: 91, reason: "..."}
-    Leader->>Validator: Propose leader_res
+    leader_data = leader_res.calldata if hasattr(leader_res, "calldata") else leader_res
+    leader = _safe_parse(leader_data)
+    if leader is None:
+        return False
 
-    Validator->>Validator: gl.nondet.web.render (Authoritative URL)
-    Validator->>Validator: gl.nondet.web.render (Infringing URL)
-    Validator->>Validator: Independent LLM prompt execution
-    Validator->>Validator: validator_fn(leader_res)
-    Note over Validator: Evaluates MEANING:<br/>1. mine['verdict'] == leader['verdict']<br/>2. (mine['confidence'] >= 75) == (leader['confidence'] >= 75)
-    Validator-->>Contract: Consensus Agreed (MAJORITY_AGREE)
-    Contract->>Contract: Transition status to INFRINGING_CONFIRMED
+    mine = _safe_parse(leader_fn())
+    if mine is None:
+        return False
+
+    return (
+        mine["verdict"] == leader["verdict"]
+        and (mine["confidence"] >= 75) == (leader["confidence"] >= 75)
+    )
 ```
 
-### Consensus Implementation Details:
-1. **Multi-Sample Divergence Filtering**: The leader executes the prompt twice (`raw1`, `raw2`). If the verdicts diverge or either cannot be parsed, the leader returns `ABORT` to avoid propagating ambiguous or hallucinated results.
-2. **Equivalence on Semantic Verdict**:
-   ```python
-   def validator_fn(leader_res) -> bool:
-       ...
-       mine = _safe_parse(leader_fn())
-       ...
-       return (
-           mine["verdict"] == leader["verdict"]
-           and (mine["confidence"] >= 75) == (leader["confidence"] >= 75)
-       )
-   ```
-   - Two validators that reach different legal verdicts (`INFRINGING_COPY` vs `FAIR_USE`) will **never** both pass.
-   - Variations in natural language phrasing in the `reason` string do not cause consensus failure because the judicial finding and the confidence classification match.
-3. **Escalation Protocol**: If confidence is under 75% or web rendering fails (e.g., bot protection, 404), the verdict defaults to `ABORT` and the claim state moves to `ESCALATED`, enabling manual review by the designated `compliance_arbiter`.
+1. **Semantic Verdict Agreement**: Validators must reach identical judicial classifications:
+   - `INFRINGING_COPY`: Provenance corroborated, unauthorized copy exceeding fair use.
+   - `AUTHORIZED_USE`: Copying is permitted or complies with license attribution terms.
+   - `FAIR_USE`: Transformative commentary, critique, or independent creation.
+   - `UNVERIFIED_PROVENANCE`: Authoritative source fails to substantiate authorship or declared license.
+   - `UNRELATED`: Insufficient similarity.
+   - `ABORT`: Network or parsing failure.
+2. **Uniform Confidence Threshold**: Both leader and validators must agree that the decision meets the high-confidence threshold ($\ge 75\%$).
+3. **Escalation Protocol**: If web scraping fails (bot protection, 404) or confidence is $< 75\%$, the claim enters `ESCALATED` state, allowing the `compliance_arbiter` to conduct manual resolution (`resolve_escalated_claim`).
 
 ---
 
@@ -141,12 +187,12 @@ autonomous-ip-guard/
 ├── contracts/
 │   └── Contract.py          # Intelligent Contract compliant with GenLayer v0.2.16
 ├── tests/
-│   └── test_ip_guard.py     # Pytest & gltest test suite (URL validation, boundaries, sanitizer)
+│   └── test_ip_guard.py     # Pytest & gltest test suite (provenance, auth, boundary tests)
 ├── scripts/
-│   └── deploy.py            # Automated deployment script for GenLayer studionet
+│   └── deploy.py            # Automated deployment script with transient error retry
 ├── gltest.config.yaml       # GenLayer test runner configuration
 ├── requirements.txt         # Core dependencies
-├── requirements-dev.txt     # Development and testing dependencies (genlayer-test, pytest)
+├── requirements-dev.txt     # Development dependencies (genlayer-test, pytest)
 ├── deployment_receipt.json  # Studionet on-chain deployment receipt
 ├── .env.example             # Environment template
 ├── .gitignore               # Strict gitignore protecting keys and artifacts
@@ -158,31 +204,31 @@ autonomous-ip-guard/
 ## 🛠️ Public Contract API
 
 ### Write Operations
-- `register_original_work(title: str, official_source_url: str, license_terms: str) -> str`  
-  Registers an authoritative creative work, validates URL scheme and hostname, and returns a unique `work_id`.
+- `register_original_work(title: str, official_source_url: str, license_terms: str, author_identity: str = "") -> str`  
+  Registers a creative work along with expected author identity/byline, returning a unique `work_id`.
 - `file_and_adjudicate_claim(work_id: str, infringing_url: str, specific_allegation: str) -> str`  
-  Spawns non-deterministic web rendering and dual LLM consensus adjudication. Records verdict on-chain.
+  Executes non-deterministic web rendering, provenance corroboration, authorization auditing, and multi-sample LLM adjudication.
 - `resolve_escalated_claim(claim_id: str, manual_verdict: str, override_reason: str) -> None`  
-  Restricted to `compliance_arbiter` to resolve edge cases where web pages were unreachable or confidence fell below 75%.
+  Arbiter-only fallback to settle claims where web rendering failed or confidence fell below 75%.
 
 ### View Operations
 - `is_claim_infringing(claim_id: str) -> bool`  
-  Fast boolean check callable by other smart contracts to verify if a claim is confirmed infringing.
+  Boolean check callable by other smart contracts to verify if a claim is confirmed infringing.
 - `get_work(work_id: str) -> str`  
-  Returns serialized JSON metadata for the specified `work_id`.
+  Returns serialized JSON metadata including `author_identity`, `verified_license`, and `provenance_status`.
 - `get_claim(claim_id: str) -> str`  
-  Returns serialized JSON metadata for the specified `claim_id` (verdict, confidence score, and legal justification).
+  Returns serialized JSON metadata including `provenance_evidence`, `authorization_evidence`, `verdict`, and `confidence`.
 - `get_stats() -> str`  
-  Returns global registry statistics (`total_registered_works`, `total_infringements_confirmed`).
+  Returns global court statistics (`total_registered_works`, `total_infringements_confirmed`).
 
 ---
 
 ## 🔌 Reusability & Downstream Composability
 
-`autonomous-ip-guard` is designed as a foundational Web3 infrastructure primitive:
-1. **Decentralized Publishing & Substack DAOs**: Automatically verify copyright compliance before disbursing author grants or publishing on decentralized storage (IPFS/Arweave).
-2. **NFT Licensing & Royalty Escrows**: Smart contracts managing IP licensing can call `is_claim_infringing()` to pause royalty distribution or freeze licenses if a licensee infringes terms.
-3. **Open-Source Code Bounty Tribunals**: Autonomous arbitration for code plagiarism disputes across Web3 hackathons and protocol bounties.
+`autonomous-ip-guard` serves as a foundational Web3 intellectual property primitive:
+1. **NFT Licensing & Royalty Escrows**: Smart contracts managing IP licensing can query `is_claim_infringing()` to pause royalty payouts or revoke tokenized licenses upon verified infringement.
+2. **Decentralized Publishing & Grant DAOs**: Automatically verify original authorship and copyright compliance prior to disbursing grants or publishing to IPFS/Arweave.
+3. **Open-Source Code Bounty Tribunals**: Resolve plagiarism allegations in hackathons and protocol bounties by auditing commit history, author bylines, and license attribution.
 
 ---
 
